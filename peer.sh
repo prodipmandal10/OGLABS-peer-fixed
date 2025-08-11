@@ -3,19 +3,19 @@
 stop_node() {
     echo "========== STEP 1: STOP YOUR NODE =========="
     sudo systemctl stop zgs
-    echo "Node stopped."
+    echo "Node stopped successfully."
 }
 
 rpc_change() {
     echo "========== STEP 2: RPC CHANGE =========="
     bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/rpc_change.sh)
-    echo "RPC changed."
+    echo "RPC change completed."
 }
 
 key_change() {
     echo "========== STEP 3: PVT KEY CHANGE =========="
     bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/key_change.sh)
-    echo "Private key changed."
+    echo "Private key change completed."
 }
 
 start_service() {
@@ -23,18 +23,19 @@ start_service() {
     sudo systemctl daemon-reload
     sudo systemctl enable zgs
     sudo systemctl start zgs
-    echo "Service started."
+    echo "Service reloaded, enabled, and started."
 }
 
 block_check() {
     echo "========== STEP 5: BLOCK CHECK =========="
     bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/logs.sh)
+    echo "Block check complete."
 }
 
 while true; do
     clear
     echo "==========================================="
-    echo "         🚀  MADE BY PRODIP  🚀"
+    echo "           MADE BY PRODIP"
     echo "==========================================="
     echo "========== MENU =========="
     echo "1. STOP YOUR NODE"
@@ -55,6 +56,7 @@ while true; do
         6) echo "Exiting..."; exit 0 ;;
         *) echo "Invalid choice, try again." ;;
     esac
+
     echo ""
-    read -p "Press ENTER to return to menu..."
+    read -p "Press ENTER to return to menu..." _
 done
