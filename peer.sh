@@ -1,107 +1,96 @@
 #!/bin/bash
 
-gdrive_download() {
-    FILEID=$1
-    FILENAME=$2
+# =========================
+# 0G Storage Node Helper Script
+# MADE BY PRODIP
+# =========================
 
-    CONFIRM=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate \
-        "https://docs.google.com/uc?export=download&id=${FILEID}" -O- | \
-        sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')
-
-    wget --load-cookies /tmp/cookies.txt \
-        "https://docs.google.com/uc?export=download&confirm=${CONFIRM}&id=${FILEID}" \
-        -O "${FILENAME}"
-
-    rm -rf /tmp/cookies.txt
-}
+FLOW_DB_URL="https://drive.usercontent.google.com/uc?id=1Bu3A7rFEXF_sN9723glJjCT9sQ6wyC-8&export=download"
+FLOW_DB_DIR="/home/ubuntu/0g-storage-node/run/db"
 
 install_node() {
-    # ... [আপনার আগের install_node কোড এখানে থাকবে, আগের মতোই] ...
     echo "🚀 Starting 0G Storage Node Auto Installer..."
-    # ... পুরো কোড আগের মতোই থাকবে ...
+    echo "Do you want to use Fast Sync with flow_db restore from Google Drive? (y/n): "
+    read fast_sync
+
+    bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/node.sh)
+
+    if [[ "$fast_sync" == "y" || "$fast_sync" == "Y" ]]; then
+        echo "📥 Downloading flow_db from Google Drive..."
+        mkdir -p "$FLOW_DB_DIR"
+        wget -O "$FLOW_DB_DIR/flow_db.zip" "$FLOW_DB_URL"
+
+        echo "🧩 Extracting flow_db.zip..."
+        unzip -o "$FLOW_DB_DIR/flow_db.zip" -d "$FLOW_DB_DIR"
+
+        echo "✅ Fast sync data applied."
+    fi
+
+    echo "Press ENTER to return to menu..."
+    read
 }
 
 stop_node() {
-    echo "========== STEP 1: STOP YOUR NODE =========="
+    echo "🛑 Stopping Node..."
     sudo systemctl stop zgs
-    echo "Node stopped successfully."
+    echo "✅ Node Stopped."
+    read -p "Press ENTER to return to menu..."
 }
 
 rpc_change() {
-    echo "========== STEP 2: RPC CHANGE =========="
+    echo "🔁 Changing RPC..."
     bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/rpc_change.sh)
-    echo "RPC change completed."
+    read -p "Press ENTER to return to menu..."
 }
 
-key_change() {
-    echo "========== STEP 3: PVT KEY CHANGE =========="
-    bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/key_change.sh)
-    echo "Private key change completed."
+pvt_key_change() {
+    echo "🔑 Changing Private Key..."
+    bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/pvt_key.sh)
+    read -p "Press ENTER to return to menu..."
 }
 
 start_service() {
-    echo "========== STEP 4: START SERVICE =========="
+    echo "🚀 Enabling & Starting Service..."
+    sudo systemctl daemon-reexec
     sudo systemctl daemon-reload
     sudo systemctl enable zgs
-    sudo systemctl start zgs
-    echo "Service reloaded, enabled, and started."
+    sudo systemctl restart zgs
+    echo "✅ Node Started."
+    read -p "Press ENTER to return to menu..."
 }
 
 block_check() {
-    echo "========== STEP 5: BLOCK CHECK =========="
-    bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/logs.sh)
-    echo "Block check complete."
+    echo "📦 Checking Blocks..."
+    bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/check_block.sh)
+    read -p "Press ENTER to return to menu..."
 }
 
-delete_all_nodedata() {
-    echo "========== STEP 7: DELETE ALL NODE DATA =========="
-    read -p "⚠️ Are you sure you want to DELETE ALL node data? This action is irreversible! (y/n): " confirm
-    if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        echo "Deleting all node data..."
-        rm -rf "$HOME/0g-storage-node/run/db" "$HOME/0g-storage-node/run/log" "$HOME/0g-storage-node/run/flow_db.tar.gz"
-        echo "All node data deleted."
-    else
-        echo "Deletion cancelled."
-    fi
+delete_node_data() {
+    echo "⚠️ Deleting all node-related data..."
+    rm -rf ~/0g-storage-node
+    echo "✅ Node data deleted."
+    read -p "Press ENTER to return to menu..."
 }
 
 delete_everything() {
-    echo "========== WARNING: DELETE EVERYTHING ON VPS =========="
-    read -p "⚠️ Are you 100% sure to DELETE EVERYTHING in your VPS HOME directory? This is IRREVERSIBLE! (y/n): " confirm
-    if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        echo "Deleting ALL files and folders in $HOME ..."
-        rm -rf "$HOME"/* "$HOME"/.[!.]* "$HOME"/..?*
-        echo "All data in $HOME has been deleted."
-        echo "Note: VPS OS and system files outside HOME are untouched."
+    echo "⚠️ WARNING: This will delete EVERYTHING under /home/ubuntu. Are you sure? (y/n): "
+    read confirm
+    if [[ "$confirm" == "y" || "$confirm" == "Y" ]]; then
+        sudo rm -rf /home/ubuntu/*
+        echo "✅ Everything deleted from VPS."
     else
-        echo "Deletion cancelled."
+        echo "❌ Aborted."
     fi
+    read -p "Press ENTER to return to menu..."
 }
 
-download_flowdb() {
-    echo "========== DOWNLOAD FLOW_DB FROM GOOGLE DRIVE =========="
-    read -p "⚠️ This will overwrite existing flow_db data. Continue? (y/n): " confirm
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-        echo "Cancelled download."
-        return
-    fi
-
-    DEST="$HOME/0g-storage-node/run/db/flow_db.tar.gz"
-    echo "Downloading flow_db.tar.gz from Google Drive..."
-    gdrive_download "1Bu3A7rFEXF_sN9723glJjCT9sQ6wyC-8" "$DEST"
-
-    if [ $? -ne 0 ]; then
-        echo "❌ Download failed! Please check your connection or Google Drive link."
-        return
-    fi
-
-    echo "Removing old flow_db folder..."
-    rm -rf "$HOME/0g-storage-node/run/db/flow_db"
-
-    echo "Extracting flow_db.tar.gz..."
-    tar -xzvf "$DEST" -C "$HOME/0g-storage-node/run/db/"
-
-    echo "Download and extraction complete."
+download_flow_db_only() {
+    echo "📥 Downloading only flow_db from Google Drive..."
+    mkdir -p "$FLOW_DB_DIR"
+    wget -O "$FLOW_DB_DIR/flow_db.zip" "$FLOW_DB_URL"
+    unzip -o "$FLOW_DB_DIR/flow_db.zip" -d "$FLOW_DB_DIR"
+    echo "✅ flow_db downloaded and extracted."
+    read -p "Press ENTER to return to menu..."
 }
 
 while true; do
@@ -127,16 +116,13 @@ while true; do
         0) install_node ;;
         1) stop_node ;;
         2) rpc_change ;;
-        3) key_change ;;
+        3) pvt_key_change ;;
         4) start_service ;;
         5) block_check ;;
-        6) echo "Exiting..."; exit 0 ;;
-        7) delete_all_nodedata ;;
+        6) echo "👋 Exiting..."; break ;;
+        7) delete_node_data ;;
         8) delete_everything ;;
-        9) download_flowdb ;;
-        *) echo "Invalid choice, try again." ;;
+        9) download_flow_db_only ;;
+        *) echo "❌ Invalid choice."; sleep 1 ;;
     esac
-
-    echo ""
-    read -p "Press ENTER to return to menu..." _
 done
