@@ -101,10 +101,19 @@ EOF
         sudo systemctl stop zgs
         rm -rf "$HOME/0g-storage-node/run/db/flow_db"
 
-        echo "⬇️ Downloading and Extracting fast sync database..."
-        wget https://github.com/HustleAirdrops/0G-Storage-Node/releases/download/Try/flow_db.tar.gz \
-          -O $HOME/0g-storage-node/run/db/flow_db.tar.gz && \
-          tar -xzvf $HOME/0g-storage-node/run/db/flow_db.tar.gz -C $HOME/0g-storage-node/run/db/
+        echo "⬇️ Downloading and Extracting fast sync database from Google Drive..."
+
+        GDRIVE_FILE_ID="1Bu3A7rFEXF_sN9723glJjCT9sQ6wyC-8"
+        DEST="$HOME/0g-storage-node/run/db/flow_db.tar.gz"
+
+        wget --load-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate "https://docs.google.com/uc?export=download&id=${GDRIVE_FILE_ID}" -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=${GDRIVE_FILE_ID}" -O "$DEST" && rm -rf /tmp/cookies.txt
+
+        if [ $? -ne 0 ]; then
+            echo "❌ Download failed! Please check your internet connection or Google Drive link."
+            exit 1
+        fi
+
+        tar -xzvf "$DEST" -C "$HOME/0g-storage-node/run/db/"
 
         echo "🚀 Restarting node with fast sync data..."
         sleep 5
@@ -153,6 +162,31 @@ block_check() {
     echo "Block check complete."
 }
 
+delete_all_nodedata() {
+    echo "========== STEP 7: DELETE ALL NODE DATA =========="
+    read -p "⚠️ Are you sure you want to DELETE ALL node data? This action is irreversible! (y/n): " confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        echo "Deleting all node data..."
+        rm -rf "$HOME/0g-storage-node/run/db" "$HOME/0g-storage-node/run/log" "$HOME/0g-storage-node/run/flow_db.tar.gz"
+        echo "All node data deleted."
+    else
+        echo "Deletion cancelled."
+    fi
+}
+
+delete_everything() {
+    echo "========== WARNING: DELETE EVERYTHING ON VPS =========="
+    read -p "⚠️ Are you 100% sure to DELETE EVERYTHING in your VPS HOME directory? This is IRREVERSIBLE! (y/n): " confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        echo "Deleting ALL files and folders in $HOME ..."
+        rm -rf "$HOME"/* "$HOME"/.[!.]* "$HOME"/..?*
+        echo "All data in $HOME has been deleted."
+        echo "Note: VPS OS and system files outside HOME are untouched."
+    else
+        echo "Deletion cancelled."
+    fi
+}
+
 while true; do
     clear
     echo "==========================================="
@@ -166,8 +200,10 @@ while true; do
     echo "4. START SERVICE (Reload + Enable + Start)"
     echo "5. BLOCK CHECK"
     echo "6. EXIT"
+    echo "7. DELETE ALL NODE DATA"
+    echo "8. DELETE EVERYTHING IN VPS HOME DIRECTORY"
     echo "============================"
-    read -p "Enter choice [0-6]: " choice
+    read -p "Enter choice [0-8]: " choice
 
     case $choice in
         0) install_node ;;
@@ -177,6 +213,8 @@ while true; do
         4) start_service ;;
         5) block_check ;;
         6) echo "Exiting..."; exit 0 ;;
+        7) delete_all_nodedata ;;
+        8) delete_everything ;;
         *) echo "Invalid choice, try again." ;;
     esac
 
