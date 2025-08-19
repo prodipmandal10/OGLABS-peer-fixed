@@ -1,5 +1,20 @@
 #!/bin/bash
 
+gdrive_download() {
+    FILEID=$1
+    FILENAME=$2
+
+    CONFIRM=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate \
+        "https://docs.google.com/uc?export=download&id=${FILEID}" -O- | \
+        sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')
+
+    wget --load-cookies /tmp/cookies.txt \
+        "https://docs.google.com/uc?export=download&confirm=${CONFIRM}&id=${FILEID}" \
+        -O "${FILENAME}"
+
+    rm -rf /tmp/cookies.txt
+}
+
 install_node() {
     echo "========== 0G STORAGE NODE INSTALLER =========="
     
@@ -106,7 +121,7 @@ EOF
         GDRIVE_FILE_ID="1Bu3A7rFEXF_sN9723glJjCT9sQ6wyC-8"
         DEST="$HOME/0g-storage-node/run/db/flow_db.tar.gz"
 
-        wget --load-cookies /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$(wget --quiet --save-cookies /tmp/cookies.txt --keep-session-cookies --no-check-certificate "https://docs.google.com/uc?export=download&id=${GDRIVE_FILE_ID}" -O- | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')&id=${GDRIVE_FILE_ID}" -O "$DEST" && rm -rf /tmp/cookies.txt
+        gdrive_download "$GDRIVE_FILE_ID" "$DEST"
 
         if [ $? -ne 0 ]; then
             echo "❌ Download failed! Please check your internet connection or Google Drive link."
