@@ -1,145 +1,118 @@
 #!/bin/bash
 
-# Color codes
-YELLOW='\033[1;33m'
-CYAN='\033[1;36m'
-GREEN='\033[1;32m'
-RED='\033[1;31m'
-RESET='\033[0m'
+set -e
 
-print_header() {
-    clear
-    echo -e "${YELLOW}"
-    echo " ____   _____  _   _   ____    _    ____   "
-    echo "| __ ) | ____|| \\ | | |  _ \\  / \\  |  _ \\  "
-    echo "|  _ \\ |  _|  |  \\| | | | | |/ _ \\ | | | | "
-    echo "| |_) || |___ | |\\  | | |_| / ___ \\| |_| | "
-    echo "|____/ |_____||_| \\_| |____/_/   \\_\\____/  "
-    echo "                                          "
-    echo -e "${GREEN}              BENGALI AIRDROP               ${YELLOW}"
-    echo "  Join our channel: https://t.me/BENGAL_AIR"
-    echo -e "${RESET}\n"
-}
+# Step 0: Go to home directory to keep everything relative to home
+cd "$HOME"
 
-stop_node() {
-    echo -e "${CYAN}========== STEP 1: STOP YOUR NODE ==========${RESET}"
-    sudo systemctl stop zgs
-    echo -e "${GREEN}✅ Node stopped successfully.${RESET}"
-}
+if [ -d "0g-storage-node" ]; then
+    echo "✅ 0g-storage-node is already installed. Exiting installer."
+    return 0 2>/dev/null || exit 0
+fi
 
-rpc_change() {
-    echo -e "${CYAN}========== STEP 2: RPC CHANGE ==========${RESET}"
-    bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/rpc_change.sh)
-    echo -e "${GREEN}✅ RPC change completed.${RESET}"
-}
+echo "🚀 Starting 0G Storage Node Auto Installer..."
 
-key_change() {
-    echo -e "${CYAN}========== STEP 3: PRIVATE KEY CHANGE ==========${RESET}"
-    bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/key_change.sh)
-    echo -e "${GREEN}✅ Private key change completed.${RESET}"
-}
+# Step 1: Update & install dependencies
+sudo apt-get update && sudo apt-get upgrade -y
+sudo apt install -y curl iptables build-essential git wget lz4 jq make cmake gcc nano automake autoconf tmux htop nvme-cli libgbm1 pkg-config libssl-dev libleveldb-dev tar clang bsdmainutils ncdu unzip screen ufw xdotool
 
-start_service() {
-    echo -e "${CYAN}========== STEP 4: START SERVICE ==========${RESET}"
-    sudo systemctl daemon-reload
-    sudo systemctl enable zgs
-    sudo systemctl start zgs
-    echo -e "${GREEN}✅ Service reloaded, enabled, and started.${RESET}"
-}
+# Step 2: Install Rust (if not installed)
+if ! command -v rustc &> /dev/null; then
+    echo "🔧 Installing Rust..."
+    curl https://sh.rustup.rs -sSf | sh -s -- -y
+    source "$HOME/.cargo/env"
+fi
 
-block_check() {
-    echo -e "${CYAN}========== STEP 5: BLOCK CHECK ==========${RESET}"
-    bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/logs.sh)
-    echo -e "${GREEN}✅ Block check complete.${RESET}"
-}
+# Step 3: Install Go (if not installed)
+if ! command -v go &> /dev/null; then
+    echo "🔧 Installing Go..."
+    wget https://go.dev/dl/go1.24.3.linux-amd64.tar.gz
+    sudo rm -rf /usr/local/go
+    sudo tar -C /usr/local -xzf go1.24.3.linux-amd64.tar.gz
+    rm go1.24.3.linux-amd64.tar.gz
+    echo 'export PATH=$PATH:/usr/local/go/bin' >> "$HOME/.bashrc"
+    source "$HOME/.bashrc"
+fi
 
-install_node() {
-    echo -e "${CYAN}========== STEP 0: INSTALL NODE (Without Fast Sync) ==========${RESET}"
-    bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/node.sh)
-    echo -e "${GREEN}✅ Node installation script executed.${RESET}"
-}
+# Step 4: Clone repo (already in $HOME)
+echo "📁 Cloning 0g-storage-node repository..."
+git clone https://github.com/0glabs/0g-storage-node.git
+cd 0g-storage-node
+git checkout v1.1.0
+git submodule update --init
 
-apply_fast_sync() {
-    echo -e "${CYAN}========== APPLY FAST SYNC ==========${RESET}"
-    echo "⬇️ Downloading flow_db.tar.gz from Mega.nz..."
+# Step 5: Build node
+sudo apt install -y protobuf-compiler
+echo "⚙️ Building node..."
+cargo build --release
 
-    # Install megatools if not present
-    if ! command -v megadl &> /dev/null; then
-        echo "🔧 Installing megatools for Mega.nz download..."
-        sudo apt update
-        sudo apt install -y megatools
-    fi
+# Step 6: Setup config file
+rm -f "$HOME/0g-storage-node/run/config.toml"
+mkdir -p "$HOME/0g-storage-node/run"
+curl -o "$HOME/0g-storage-node/run/config.toml" https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/config.toml
 
-    # Remove existing DB files
-    rm -rf "$HOME/.0g-storage-node/run/db/flow_db"
-    rm -f "$HOME/.0g-storage-node/run/db/flow_db.tar.gz"
+# Step 7: Get private key and rpc from user
+read -e -p "🔐 Enter PRIVATE KEY (with or without 0x): " k; k=${k#0x}; printf "\033[A\033[K"; [[ ${#k} -eq 64 && "$k" =~ ^[0-9a-fA-F]+$ ]] && sed -i "s|miner_key = .*|miner_key = \"$k\"|" "$HOME/0g-storage-node/run/config.toml" && echo "✅ Private key updated: ${k:0:4}****${k: -4}" || echo "❌ Invalid key! Must be 64 hex chars."
+read -e -p "🌐 Enter new blockchain_rpc_endpoint URL: " r; echo; if [[ -z "$r" ]]; then echo "❌ Error: URL cannot be empty."; else sed -i "s|blockchain_rpc_endpoint = .*|blockchain_rpc_endpoint = \"$r\"|" "$HOME/0g-storage-node/run/config.toml" && echo "✅ blockchain_rpc_endpoint updated to: $r"; fi
 
-    # Download flow_db.tar.gz
-    megadl 'https://mega.nz/file/eJ0RXY4Q#5RDf_7Y7HW8eUKzQvqACCkynNAOrtXDfp4Z0uYCWnsg' -O "$HOME/.0g-storage-node/run/db/flow_db.tar.gz"
+# Step 8: Create systemd service
+sudo tee /etc/systemd/system/zgs.service > /dev/null <<EOF
+[Unit]
+Description=ZGS Node
+After=network.target
 
-    if [[ $? -ne 0 ]]; then
-        echo -e "${RED}❌ Download failed. Please check your internet connection or link.${RESET}"
-        return 1
-    fi
+[Service]
+User=$USER
+WorkingDirectory=$HOME/0g-storage-node/run
+ExecStart=$HOME/0g-storage-node/target/release/zgs_node --config $HOME/0g-storage-node/run/config.toml
+Restart=on-failure
+RestartSec=10
+LimitNOFILE=65535
 
-    echo "🗜️ Extracting flow_db.tar.gz ..."
-    tar -xzvf "$HOME/.0g-storage-node/run/db/flow_db.tar.gz" -C "$HOME/.0g-storage-node/run/db/"
+[Install]
+WantedBy=multi-user.target
+EOF
 
-    echo -e "${GREEN}✅ Fast sync applied successfully.${RESET}"
-    echo "🔄 Restarting node service..."
-    sudo systemctl restart zgs
-    echo -e "${GREEN}✅ Node restarted with fast sync data.${RESET}"
-}
+sudo systemctl daemon-reload
+sudo systemctl enable zgs
 
-delete_node_data() {
-    echo -e "${CYAN}========== DELETE NODE DATA ==========${RESET}"
-    echo "Deleting files in $HOME/.0g-storage-node/run/db/"
-    rm -rf "$HOME/.0g-storage-node/run/db/"*
-    echo -e "${GREEN}✅ Node DB data deleted successfully.${RESET}"
-}
+# Step 9: Fast Sync - Auto Apply (from MEGA)
+echo ""
+echo "⚡ Starting node and waiting 30 seconds before applying fast sync..."
+sudo systemctl start zgs
+sleep 60
 
-delete_everything() {
-    echo -e "${RED}========== DELETE EVERYTHING IN VPS HOME DIRECTORY ==========${RESET}"
-    read -p "⚠️ Are you sure you want to delete EVERYTHING in HOME directory? (yes/no): " confirm
-    if [[ "$confirm" == "yes" ]]; then
-        rm -rf ~/*
-        echo -e "${GREEN}✅ All files in HOME directory deleted.${RESET}"
-    else
-        echo -e "${YELLOW}❌ Cancelled.${RESET}"
-    fi
-}
+echo "🛑 Stopping node to apply fast sync..."
+sudo systemctl stop zgs
+rm -rf "$HOME/0g-storage-node/run/db/flow_db"
 
-while true; do
-    print_header
-    echo -e "${YELLOW}========== MENU ==========${RESET}"
-    echo -e "${CYAN}0.${RESET} INSTALL NODE (Without Fast Sync)"
-    echo -e "${CYAN}1.${RESET} STOP YOUR NODE"
-    echo -e "${CYAN}2.${RESET} RPC CHANGE"
-    echo -e "${CYAN}3.${RESET} PRIVATE KEY CHANGE"
-    echo -e "${CYAN}4.${RESET} START SERVICE (Reload + Enable + Start)"
-    echo -e "${CYAN}5.${RESET} BLOCK CHECK"
-    echo -e "${CYAN}6.${RESET} EXIT"
-    echo -e "${CYAN}7.${RESET} DELETE ALL NODE DATA"
-    echo -e "${CYAN}8.${RESET} APPLY FAST SYNC"
-    echo -e "${RED}9.${RESET} DELETE EVERYTHING IN VPS HOME DIRECTORY"
-    echo -e "${YELLOW}============================${RESET}"
+# Check if megadl installed, if not install megatools
+if ! command -v megadl &> /dev/null
+then
+    echo "🔧 Installing megatools (for Mega downloads)..."
+    sudo apt-get update
+    sudo apt-get install -y megatools
+fi
 
-    read -p "Enter choice [0-9]: " choice
+echo "⬇️ Downloading and Extracting fast sync database from Mega..."
 
-    case $choice in
-        0) install_node ;;
-        1) stop_node ;;
-        2) rpc_change ;;
-        3) key_change ;;
-        4) start_service ;;
-        5) block_check ;;
-        6) echo -e "${YELLOW}👋 Exiting... Bye!${RESET}"; exit 0 ;;
-        7) delete_node_data ;;
-        8) apply_fast_sync ;;
-        9) delete_everything ;;
-        *) echo -e "${RED}❌ Invalid choice, try again.${RESET}" ;;
-    esac
+megadl "https://mega.nz/file/eJ0RXY4Q#5RDf_7Y7HW8eUKzQvqACCkynNAOrtXDfp4Z0uYCWnsg" -o "$HOME/0g-storage-node/run/db/flow_db.tar.gz"
 
-    echo ""
-    read -p "Press ENTER to return to menu..." _
-done
+tar -xzvf "$HOME/0g-storage-node/run/db/flow_db.tar.gz" -C "$HOME/0g-storage-node/run/db/"
+
+echo "🚀 Restarting node with fast sync data..."
+sleep 5
+sudo systemctl restart zgs
+
+# Final Message
+echo ""
+echo "🎉 Installation complete with fast sync!"
+echo "👉 To start your node manually (already started):"
+echo ""
+echo "   sudo systemctl start zgs"
+echo ""
+echo "📄 To view logs:"
+echo "   tail -f \$HOME/0g-storage-node/run/log/zgs.log.\$(TZ=UTC date +%Y-%m-%d)"
+echo ""
+echo "📊 To monitor sync progress:"
+echo "   bash <(curl -s https://raw.githubusercontent.com/HustleAirdrops/0G-Storage-Node/main/logs.sh)"
